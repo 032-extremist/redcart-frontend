@@ -1,7 +1,22 @@
 import axios from "axios";
 import { storage } from "../utils/storage";
 
-const baseURL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
+const normalizeApiBase = (value?: string) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.endsWith("/api/v1") ? trimmed : `${trimmed}/api/v1`;
+};
+
+const configuredApiBase = normalizeApiBase(import.meta.env.VITE_API_URL);
+const fallbackApiBase = import.meta.env.DEV ? "http://localhost:4000/api/v1" : "/api/v1";
+const baseURL = configuredApiBase ?? fallbackApiBase;
 
 export const api = axios.create({
   baseURL,
