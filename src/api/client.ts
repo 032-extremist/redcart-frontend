@@ -29,7 +29,8 @@ const isLocalhostUrl = (value?: string) => {
 };
 
 const configuredFallbackApiBase = normalizeApiBase(import.meta.env.VITE_API_FALLBACK_URL);
-const productionFallbackApiBase = configuredFallbackApiBase ?? "/api/v1";
+const defaultProductionApiBase = "https://redcart-backend.onrender.com/api/v1";
+const productionFallbackApiBase = configuredFallbackApiBase ?? defaultProductionApiBase;
 const fallbackApiBase = import.meta.env.DEV ? "http://localhost:4000/api/v1" : productionFallbackApiBase;
 const baseURL =
   !import.meta.env.DEV && isLocalhostUrl(configuredApiBase) ? productionFallbackApiBase : configuredApiBase ?? fallbackApiBase;
