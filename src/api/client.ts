@@ -15,8 +15,24 @@ const normalizeApiBase = (value?: string) => {
 };
 
 const configuredApiBase = normalizeApiBase(import.meta.env.VITE_API_URL);
-const fallbackApiBase = import.meta.env.DEV ? "http://localhost:4000/api/v1" : "/api/v1";
-const baseURL = configuredApiBase ?? fallbackApiBase;
+const isLocalhostUrl = (value?: string) => {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return ["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const configuredFallbackApiBase = normalizeApiBase(import.meta.env.VITE_API_FALLBACK_URL);
+const productionFallbackApiBase = configuredFallbackApiBase ?? "/api/v1";
+const fallbackApiBase = import.meta.env.DEV ? "http://localhost:4000/api/v1" : productionFallbackApiBase;
+const baseURL =
+  !import.meta.env.DEV && isLocalhostUrl(configuredApiBase) ? productionFallbackApiBase : configuredApiBase ?? fallbackApiBase;
 
 export const api = axios.create({
   baseURL,
