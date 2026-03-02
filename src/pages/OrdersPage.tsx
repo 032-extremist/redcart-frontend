@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ordersApi } from "../api/orders";
+import { paymentsApi } from "../api/payments";
 import { receiptsApi } from "../api/receipts";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Order } from "../types";
@@ -12,10 +13,74 @@ export function OrdersPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    ordersApi
-      .list()
-      .then(setOrders)
-      .finally(() => setLoading(false));
+    const loadOrders = async () => {
+      try {
+        const initialOrders = await ordersApi.list();
+        setOrders(initialOrders);
+
+        const pendingMpesaOrders = initialOrders.filter(
+          (order) => order.payment?.provider === "MPESA" && order.payment?.status === "PENDING",
+        );
+
+        if (pendingMpesaOrders.length === 0) {
+          return;
+        }
+
+        const statusResults = await Promise.all(
+          pendingMpesaOrders.map(async (order) => {
+            if (!order.payment) {
+              return null;
+            }
+
+            try {
+              const status = await paymentsApi.getMpesaStatus(order.payment.id);
+              return {
+                orderId: order.id,
+                orderStatus: status.order?.status as Order["status"] | undefined,
+                paymentStatus: status.status as NonNullable<Order["payment"]>["status"],
+                transactionRef:
+                  typeof status.transactionRef === "string" ? status.transactionRef : order.payment.transactionRef,
+              };
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        const updatesByOrderId = new Map(
+          statusResults
+            .filter((item): item is NonNullable<typeof item> => Boolean(item))
+            .map((item) => [item.orderId, item]),
+        );
+
+        if (updatesByOrderId.size > 0) {
+          setOrders((prev) =>
+            prev.map((order) => {
+              const next = updatesByOrderId.get(order.id);
+              if (!next || !order.payment) {
+                return order;
+              }
+
+              return {
+                ...order,
+                status: next.orderStatus ?? order.status,
+                payment: {
+                  ...order.payment,
+                  status: next.paymentStatus,
+                  transactionRef: next.transactionRef ?? order.payment.transactionRef ?? null,
+                },
+              };
+            }),
+          );
+        }
+      } catch (loadError) {
+        setError(getApiErrorMessage(loadError, "Unable to load orders."));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadOrders();
   }, []);
 
   if (loading) {

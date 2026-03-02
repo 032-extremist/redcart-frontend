@@ -18,7 +18,7 @@ export interface Receipt {
 }
 
 export interface ReceiptDownloadResult {
-  emailStatus?: "sent" | "skipped" | "failed";
+  emailStatus?: "queued" | "sent" | "skipped" | "failed";
   emailReason?: string;
   emailMessageId?: string;
 }
