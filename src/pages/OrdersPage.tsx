@@ -99,7 +99,7 @@ export function OrdersPage() {
       const receipt = await receiptsApi.byOrder(orderId);
       const downloadResult = await receiptsApi.downloadPdfByReceiptId(receipt.id, receipt.receiptNumber);
 
-      if (downloadResult.emailStatus && downloadResult.emailStatus !== "sent") {
+      if (downloadResult.emailStatus === "failed" || downloadResult.emailStatus === "skipped") {
         const reasonSuffix = downloadResult.emailReason ? ` (${downloadResult.emailReason})` : "";
         setError(`Receipt downloaded, but email copy was not sent${reasonSuffix}.`);
       }
