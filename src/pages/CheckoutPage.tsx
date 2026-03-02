@@ -4,7 +4,7 @@ import { ordersApi } from "../api/orders";
 import { paymentsApi } from "../api/payments";
 import { useCart } from "../context/CartContext";
 import { EmptyState } from "../components/ui/EmptyState";
-import { getApiErrorMessage } from "../utils/apiError";
+import { getApiErrorMessage, getApiValidationErrors } from "../utils/apiError";
 
 const initialForm = {
   shippingName: "",
@@ -17,9 +17,96 @@ const initialForm = {
   paymentMethod: "MPESA" as "MPESA" | "CARD",
 };
 
+type CheckoutForm = typeof initialForm;
+type CheckoutField =
+  | "shippingName"
+  | "shippingPhone"
+  | "shippingEmail"
+  | "shippingStreet"
+  | "shippingCity"
+  | "shippingCountry"
+  | "mpesaPayerName";
+
+const checkoutFields: Array<{
+  key: Exclude<CheckoutField, "mpesaPayerName">;
+  label: string;
+  type?: "text" | "email" | "tel";
+  placeholder?: string;
+}> = [
+  { key: "shippingName", label: "Full Name", type: "text", placeholder: "Enter your full name" },
+  { key: "shippingPhone", label: "Phone Number", type: "tel", placeholder: "e.g. 0712345678 or +254712345678" },
+  { key: "shippingEmail", label: "Email", type: "email", placeholder: "you@example.com" },
+  { key: "shippingStreet", label: "Street Address", type: "text", placeholder: "Street and house number" },
+  { key: "shippingCity", label: "City", type: "text", placeholder: "e.g. Nairobi" },
+  { key: "shippingCountry", label: "Country", type: "text", placeholder: "e.g. Kenya" },
+];
+
+const digitsCount = (value: string) => value.replace(/\D/g, "").length;
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const validateCheckoutForm = (form: CheckoutForm) => {
+  const errors: Partial<Record<CheckoutField, string>> = {};
+
+  if (form.shippingName.trim().length < 2) {
+    errors.shippingName = "Full name must be at least 2 characters.";
+  }
+
+  if (digitsCount(form.shippingPhone) < 10) {
+    errors.shippingPhone = "Phone number must be at least 10 digits.";
+  }
+
+  if (!form.shippingEmail.trim()) {
+    errors.shippingEmail = "Email is required.";
+  } else if (!isValidEmail(form.shippingEmail.trim())) {
+    errors.shippingEmail = "Enter a valid email address.";
+  }
+
+  if (form.shippingStreet.trim().length < 3) {
+    errors.shippingStreet = "Street address must be at least 3 characters.";
+  }
+
+  if (form.shippingCity.trim().length < 2) {
+    errors.shippingCity = "City must be at least 2 characters.";
+  }
+
+  if (form.shippingCountry.trim().length < 2) {
+    errors.shippingCountry = "Country must be at least 2 characters.";
+  }
+
+  if (form.paymentMethod === "MPESA" && form.mpesaPayerName.trim().length < 2) {
+    errors.mpesaPayerName = "M-Pesa registered name must be at least 2 characters.";
+  }
+
+  return errors;
+};
+
+const mapApiErrorsToCheckoutFields = (errors: Record<string, string>) => {
+  const fields: CheckoutField[] = [
+    "shippingName",
+    "shippingPhone",
+    "shippingEmail",
+    "shippingStreet",
+    "shippingCity",
+    "shippingCountry",
+    "mpesaPayerName",
+  ];
+
+  const mapped: Partial<Record<CheckoutField, string>> = {};
+  for (const field of fields) {
+    const message = errors[`body.${field}`] ?? errors[field];
+    if (message) {
+      mapped[field] = message;
+    }
+  }
+
+  return mapped;
+};
+
 export function CheckoutPage() {
   const { cart, refreshCart } = useCart();
   const [form, setForm] = useState(initialForm);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<CheckoutField, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{
     orderId: string;
@@ -33,6 +120,17 @@ export function CheckoutPage() {
   } | null>(null);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+
+  const clearFieldError = (field: CheckoutField) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
 
   if (!cart || cart.items.length === 0) {
     return (
@@ -48,7 +146,16 @@ export function CheckoutPage() {
     setSubmitting(true);
     setError("");
     setInfo("");
+    setFieldErrors({});
     setPendingMpesa(null);
+
+    const clientErrors = validateCheckoutForm(form);
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors);
+      setError("Please correct the highlighted fields.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const checkoutPayload =
@@ -109,7 +216,13 @@ export function CheckoutPage() {
 
       await refreshCart();
     } catch (checkoutError) {
-      setError(getApiErrorMessage(checkoutError, "Checkout failed. Verify details and try again."));
+      const apiValidation = mapApiErrorsToCheckoutFields(getApiValidationErrors(checkoutError));
+      if (Object.keys(apiValidation).length > 0) {
+        setFieldErrors(apiValidation);
+        setError("Please correct the highlighted fields.");
+      } else {
+        setError(getApiErrorMessage(checkoutError, "Checkout failed. Verify details and try again."));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -183,27 +296,26 @@ export function CheckoutPage() {
         <p className="mt-1 text-sm text-zinc-600">Payment is required only at checkout.</p>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {[
-            ["shippingName", "Full Name"],
-            ["shippingPhone", "Phone Number"],
-            ["shippingEmail", "Email"],
-            ["shippingStreet", "Street Address"],
-            ["shippingCity", "City"],
-            ["shippingCountry", "Country"],
-          ].map(([key, label]) => (
-            <label key={key} className="block text-sm text-zinc-700">
-              {label}
+          {checkoutFields.map((field) => (
+            <label key={field.key} className="block text-sm text-zinc-700">
+              {field.label}
               <input
-                value={form[key as keyof typeof form] as string}
-                onChange={(event) =>
+                type={field.type ?? "text"}
+                placeholder={field.placeholder}
+                value={form[field.key]}
+                onChange={(event) => {
                   setForm((prev) => ({
                     ...prev,
-                    [key]: event.target.value,
-                  }))
-                }
+                    [field.key]: event.target.value,
+                  }));
+                  clearFieldError(field.key);
+                }}
                 required
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+                className={`mt-1 w-full rounded-lg border px-3 py-2 ${
+                  fieldErrors[field.key] ? "border-red-500" : "border-zinc-300"
+                }`}
               />
+              {fieldErrors[field.key] && <p className="mt-1 text-xs text-red-600">{fieldErrors[field.key]}</p>}
             </label>
           ))}
         </div>
@@ -223,7 +335,14 @@ export function CheckoutPage() {
               <input
                 type="radio"
                 checked={form.paymentMethod === "CARD"}
-                onChange={() => setForm((prev) => ({ ...prev, paymentMethod: "CARD" }))}
+                onChange={() => {
+                  setForm((prev) => ({
+                    ...prev,
+                    paymentMethod: "CARD",
+                    mpesaPayerName: "",
+                  }));
+                  clearFieldError("mpesaPayerName");
+                }}
               />
               Card Payment
             </label>
@@ -235,11 +354,17 @@ export function CheckoutPage() {
             M-Pesa Registered Name
             <input
               value={form.mpesaPayerName}
-              onChange={(event) => setForm((prev) => ({ ...prev, mpesaPayerName: event.target.value }))}
+              onChange={(event) => {
+                setForm((prev) => ({ ...prev, mpesaPayerName: event.target.value }));
+                clearFieldError("mpesaPayerName");
+              }}
               required
               placeholder="Name registered on the paying phone number"
-              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+              className={`mt-1 w-full rounded-lg border px-3 py-2 ${
+                fieldErrors.mpesaPayerName ? "border-red-500" : "border-zinc-300"
+              }`}
             />
+            {fieldErrors.mpesaPayerName && <p className="mt-1 text-xs text-red-600">{fieldErrors.mpesaPayerName}</p>}
           </label>
         )}
 
