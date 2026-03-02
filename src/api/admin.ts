@@ -1,4 +1,7 @@
 import { api } from "./client";
+import { AdminOrder } from "../types";
+
+type PaymentStatusFilter = "PENDING" | "SUCCESS";
 
 export const adminApi = {
   salesAnalytics: () => api.get("/admin/analytics/sales").then((res) => res.data),
@@ -38,4 +41,14 @@ export const adminApi = {
   ) => api.patch(`/admin/products/${productId}`, payload).then((res) => res.data),
 
   deleteProduct: (productId: string) => api.delete(`/admin/products/${productId}`).then((res) => res.data),
+
+  listOrders: (params?: { paymentStatus?: PaymentStatusFilter; page?: number; limit?: number }) =>
+    api
+      .get("/admin/orders", { params })
+      .then((res) => res.data as { data: AdminOrder[]; meta: { page: number; limit: number; total: number; totalPages: number } }),
+
+  setOrderDelivered: (orderId: string, delivered: boolean) =>
+    api.patch(`/admin/orders/${orderId}/delivery`, { delivered }).then((res) => res.data as AdminOrder),
+
+  deleteOrder: (orderId: string) => api.delete(`/admin/orders/${orderId}`).then((res) => res.data),
 };

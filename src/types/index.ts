@@ -92,6 +92,33 @@ export interface Order {
   payment?: PaymentInfo | null;
 }
 
+export interface AdminOrder {
+  id: string;
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  };
+  paymentMethod: "MPESA" | "CARD";
+  paymentStatus: "PENDING" | "SUCCESS" | "FAILED" | null;
+  transactionCode: string | null;
+  orderStatus: "PENDING_PAYMENT" | "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELED";
+  delivered: boolean;
+  shipping: {
+    name: string;
+    phone: string;
+    email: string;
+    street: string;
+    city: string;
+    country: string;
+  };
+  total: number;
+  createdAt: string;
+  updatedAt: string;
+  items: OrderItem[];
+}
+
 export interface WishlistItem {
   id: string;
   productId: string;
